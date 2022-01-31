@@ -1,0 +1,29 @@
+{% if auth_token['defined'] and auth_token['valid'] and ssl_valid %}
+    <div class="card mb-0">
+        <div class="card-header" id="vtEnginesHeader" data-toggle="collapse" data-target="#vtEnginesContent"
+             aria-expanded="true" aria-controls="vtEnginesContent">
+                <a class="card-title">
+                    VirusTotal Engines
+                </a>
+                </a>
+        </div>
+        <div class="collapse show" id="vtEnginesContent" aria-labelledby="vtEnginesHeader">
+            <div class="card-body">
+                <form class="form" id="vtEnginesForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <label for="vtEnginesClass1Field" class="col-form-label">VirusTotal Engines Class 1 (one key per line)</label>
+                    <textarea name="vtEnginesClass1Field" class="form-control" id="vtEnginesClass1Field" rows="6">{{ vt_enginesc1 }}</textarea>
+                    <label for="vtEnginesClass2Field" class="col-form-label">VirusTotal Engines Class 2 (one key per line)</label>
+                    <textarea name="vtEnginesClass2Field" class="form-control" id="vtEnginesClass2Field" rows="6">{{ vt_enginesc2 }}</textarea>
+                    <div id="vtEnginesFieldValidationInvalid" class="invalid-feedback">
+                        Failed to save VirusTotal Engines. Contact support if error persists.
+                    </div>
+                    <div id="vtEnginesFieldValidationValid" class="valid-feedback">
+                        VirusTotal Engines successfully saved
+                    </div>
+                    <button id="vtEnginesSubmit" type="submit" class="form-control btn btn-primary">Submit</button>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endif %}
