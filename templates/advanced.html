@@ -1,0 +1,45 @@
+{% if auth_token['defined'] and auth_token['valid'] and ssl_valid %}
+    <div class="card mb-0">
+        <div class="card-header" id="advancedHeader" data-toggle="collapse" data-target="#advancedContent"
+             aria-expanded="true" aria-controls="advancedContent">
+                <a class="card-title">
+                    Advanced Settings
+                </a>
+        </div>
+        <div class="collapse show" id="advancedContent" aria-labelledby="advancedHeader">
+            <div class="card-body">
+                <form class="form" id="advancedForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="maxHashField">Max Hashes</label>
+                            <input type="number" class="form-control" id="maxHashField" value="{{ max_hashes }}"
+                                   min="1" name="maxHashField">
+                            <small class="form-text text-muted">
+                                Max number of hashes to check in a single request
+                            </small>
+                            <div id="maxHashFieldValidationInvalid" class="invalid-feedback">
+                                Save failed. Contact support if error persists
+                            </div>
+                            <div id="maxHashFieldValidationValid" class="valid-feedback">
+                                Settings saved
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="maxRateField">Rate Limit</label>
+                            <input type="number" class="form-control" id="maxRateField" value="{{ rate_limit }}"
+                                   min="1" name="maxRateField">
+                            <small class="form-text text-muted">Max number of requests per minute</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="advancedContentSubmit">&nbsp;</label>
+                            <button id="advancedContentSubmit" type="submit" class="btn btn-primary btn-block">
+                                Submit
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endif %}

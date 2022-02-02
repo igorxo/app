@@ -1,0 +1,48 @@
+{% if ssl_valid %}
+    <div class="card mb-0">
+        <div class="card-header {% if auth_token['defined'] and auth_token['valid'] %}collapsed{% endif %}"
+             id="authTokenHeader" data-toggle="collapse" data-target="#authTokenContent" aria-controls="authTokenContent"
+             aria-expanded="{% if auth_token['defined'] and auth_token['valid'] %}false{% else %}true{% endif %}" >
+                <a class="card-title">
+                    Authentication Token
+                </a>
+        </div>
+        <div class="collapse {% if not (auth_token['defined'] and auth_token['valid']) %}show{% endif %}"
+             id="authTokenContent" aria-labelledby="authTokenHeader">
+            <div class="card-body">
+                <form class="form" method="post" id="authTokenForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                   <div class="form-row">
+                       <div class="form-group">
+                           <label for="authTokenField">Auth Token</label>
+                                <input type="text" class="form-control
+                                       {% if auth_token['defined'] and auth_token['valid'] %}is-valid{% endif %}
+                                       {% if auth_token['defined'] and not auth_token['valid'] %}is-invalid{% endif %}"
+                                       placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" size="36" id="authTokenField"
+                                       name="authTokenField" onsubmit="return authTockenSave();">
+                                {% if not auth_token['defined'] %}
+                                    <small class="form-text text-muted">
+                                        Authentication Token must be defined to continue
+                                    </small>
+                                {% endif %}
+                                <div id="authTokenFieldValidationValid" class="valid-feedback">
+                                    Authentication Token is set and valid
+                                </div>
+                                <div id="authTokenFieldValidationInvalid" class="invalid-feedback">
+                                    Authentication Token is invalid or QRadar API Endpoints can not be reached
+                                </div>
+                       </div>
+                       <div class="form-group">
+                            <label for="authTokenSubmit">&nbsp;</label>
+                            <button id="authTokenSubmit" type="submit" class="btn btn-primary btn-block">
+                                {% if auth_token['defined'] %}Change{% else %}Save{% endif %}
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{% else %}
+    {% include "ssl_error.html" %}
+{% endif %}

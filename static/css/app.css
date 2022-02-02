@@ -1,0 +1,120 @@
+.header {
+    background-color: #005EB8;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+}
+
+.header .app-title{
+    color: #FFFFFF;
+    /*font-weight: 700;*/
+    font-size: 22px;
+    font-family: sans-serif;
+    margin-right: 10px;
+    line-height: 1;
+    text-align: end;
+    padding-right: 15px;
+}
+
+.header .logo {
+    width: 241px;
+    height: 49px;
+    background: url('../images/logo_white.svg') no-repeat;
+    background-size: cover;
+}
+
+.header .cog {
+    width: 27px;
+    height: 27px;
+    background: #005EB8 url('../images/cog.svg') no-repeat;
+    background-size: cover;
+}
+
+/*.header .cog svg path {*/
+    /*fill: #FFFFFF;*/
+/*}*/
+
+.header .logo a {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.footer {
+    background-color: #005EB8;
+    color: #FFFFFF;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 10px 15px 10px 15px;
+}
+
+.card-header {
+    cursor: pointer;
+    font-weight: bold;
+    font-size: larger;
+}
+
+@font-face {
+  font-family: 'Icons';
+  src: url('../fonts/open-iconic.svg') format('svg');
+  src: url('../fonts/open-iconic.eot?#iconic-sm') format('embedded-opentype'),
+       url('../fonts/open-iconic.woff') format('woff'),
+       url('../fonts/open-iconic.ttf') format('truetype'),
+       url('../fonts/open-iconic.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+.accordion .card-header:after {
+    font-family: 'Icons';
+    content: '\e09d';
+    float: right;
+}
+
+.accordion .card-header.collapsed:after {
+    font-family: 'Icons';
+    content: '\e0aa';
+    float: right;
+}
+
+.license {
+    margin-top: 10px;
+    text-align: end;
+}
+
+.form-group {
+    padding-right: 15px;
+}
+
+.btn-primary {
+    background-color: #005EB8;
+}
+
+.inputlicense {
+	width: 0px;
+	height: 0px;
+	opacity: 0;
+	overflow: hidden;
+	position: absolute;
+	z-index: -1;
+}
+
+.state-failure {
+    color: #FF0000;
+    font-weight: bold;
+}
+
+#vtKeysField {
+    margin-bottom: 10px;
+}
+
+#restrictionsLink {
+    color: #721c24;
+    text-decoration: underline;
+}
+
+#vtKeysSubmit {
+    margin-top: 10px;
+}
