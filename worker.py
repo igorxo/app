@@ -9,6 +9,8 @@ import socket
 
 from datetime import datetime
 
+import itertools
+
 
 class WorkerConfig:
     def __init__(self, config_file):
@@ -50,8 +52,8 @@ class WorkerConfig:
             'auth_token': 'xxx - xxx - xxx - xxx',
             'max_hashes': self.max_hashes,
             'rate_limit': self.rate_limit,
-            'vt_keys': '%s vt keys defined' % len(self.vt_keys)
-            'vt_enginesc1': '%s vt engines c1 defined' % len(self.vt_enginesc1)
+            'vt_keys': '%s vt keys defined' % len(self.vt_keys),
+            'vt_enginesc1': '%s vt engines c1 defined' % len(self.vt_enginesc1),
             'vt_enginesc2': '%s vt engines c2 defined' % len(self.vt_enginesc2)
         }
         return str(log_config)
@@ -70,8 +72,8 @@ class WorkerConfig:
         config = {
             'max_hashes': self.max_hashes,
             'rate_limit': self.rate_limit,
-            'vt_keys': self.vt_keys
-            'vt_enginesc1': self.vt_enginesc1
+            'vt_keys': self.vt_keys,
+            'vt_enginesc1': self.vt_enginesc1,
             'vt_enginesc2': self.vt_enginesc2
         }
         with open(self.config_file, 'w') as fp:
@@ -176,7 +178,8 @@ class WorkerQRadarAPIException(Exception):
 class Worker:
     CHECK_TABLE_NAME = 'virustotal_to_check'
     CLEAN_SET_NAME = 'virustotal_clean'
-    MSG_TEMPLATE = 'type="%s" ip="%s" hash="%s" msg="%s" positives="%s" total="%s" info=[%s]'
+#    MSG_TEMPLATE = 'type="%s" ip="%s" hash="%s" msg="%s" positives="%s" total="%s" info=[%s]'
+    MSG_TEMPLATE = 'type="%s" ip="%s" domain="%s" hash="%s" msg="%s" positives="%s" total="%s" info=[%s]'
     BAD_RATIO = 0.8  # Really malicious
     HIGH_RATIO = 0.5  # Malicious with high probability
 
@@ -194,7 +197,11 @@ class Worker:
         self.radar_requester = Requester(base_url=BASE_URL, version=API_VERSION, api_key=self.config.auth_token)
         self.vt_requester = VTRequester()
         LOGGER.debug('Worker inited')
-
+        
+        hashes = dict()
+        payback_hash_list = list()
+        clean_hash_list = list()
+        
     def refresh_config(self):
         LOGGER.info('Refreshing config....')
         self.config = WorkerConfig(CONF_FILE)
@@ -312,6 +319,14 @@ class Worker:
                                              '', '', hashes[hsh][ip]['value'])
                 self.sender.send(msg)
 
+    def vt_tasks(session):
+        tasks = []
+        for hash in hashes[:self.config.max_hashes]:
+            url = baseurl+hash
+            headers = {'x-apikey': next(iterkeys)}
+            tasks.append(session.get(url, headers=headers, ssl=False))
+        return tasks
+
     def run(self):
         LOGGER.info('Fetching hashes from QRadar')
         loaded_hashes = self.load_hashes()
@@ -327,15 +342,19 @@ class Worker:
         LOGGER.info('Purging hashes fetched')
         self.purge_hashes()
 
-        hashes = dict()
+#        hashes = dict()
         for key in loaded_hashes:
             hashes[key.lower()] = loaded_hashes[key]
 
         count = 0
         hash_keys = list(hashes.keys())
         LOGGER.debug('Num of keys to check: %s' % str(len(hash_keys)))
-        payback_hash_list = list()
-        clean_hash_list = list()
+#        payback_hash_list = list()
+#        clean_hash_list = list()
+
+############# Igor S. Custom #################################
+
+        
         start_index = 0
         end_index = self.config.max_hashes
         hash_slice = hash_keys[start_index:end_index]
