@@ -6,11 +6,11 @@ import os
 import json
 import time
 import socket
+import itertools
+import aiohttp
+import asyncio
 
 from datetime import datetime
-
-import itertools
-
 
 class WorkerConfig:
     def __init__(self, config_file):
@@ -84,9 +84,11 @@ class WorkerConfig:
 
 class VTRequester:
     SUCCESS_CODE = 200
-    RATE_LIMIT_CODE = 204
+#    RATE_LIMIT_CODE = 204
+    RATE_LIMIT_CODE = 429
     FORBIDDEN_CODE = 403
-    VT_BASE_API = 'https://www.virustotal.com/vtapi/v2'
+#    VT_BASE_API = 'https://www.virustotal.com/vtapi/v2'
+    VT_BASE_API = 'https://www.virustotal.com/api/v3'
 
     def __init__(self):
         requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
@@ -176,12 +178,13 @@ class WorkerQRadarAPIException(Exception):
 
 
 class Worker:
-    CHECK_TABLE_NAME = 'virustotal_to_check'
+    CHECK_TABLE_NAME = 'virustotal_to_check_v2C'
     CLEAN_SET_NAME = 'virustotal_clean'
 #    MSG_TEMPLATE = 'type="%s" ip="%s" hash="%s" msg="%s" positives="%s" total="%s" info=[%s]'
     MSG_TEMPLATE = 'type="%s" ip="%s" domain="%s" hash="%s" msg="%s" positives="%s" total="%s" info=[%s]'
     BAD_RATIO = 0.8  # Really malicious
     HIGH_RATIO = 0.5  # Malicious with high probability
+    VT_BASE_API = 'https://www.virustotal.com/api/v3/files/'
 
     def __init__(self):
         self.config = WorkerConfig(CONF_FILE)
@@ -198,9 +201,16 @@ class Worker:
         self.vt_requester = VTRequester()
         LOGGER.debug('Worker inited')
         
-        hashes = dict()
-        payback_hash_list = list()
-        clean_hash_list = list()
+        self.hashes = dict()
+        self.payback_hash_list = list()
+        self.clean_hash_list = list()
+
+        self.vt_keys = []
+        for akey in self.api_keys:
+            self.vt_keys.append(akey['key'])
+        self.iterkeys = itertools.cycle(self.vt_keys)
+
+        self.vtresponses = {}
         
     def refresh_config(self):
         LOGGER.info('Refreshing config....')
@@ -261,7 +271,18 @@ class Worker:
         else:
             LOGGER.error('Failed to purge hashes from QRadar: Code: %s; Data: %s' % (str(code), str(data)))
             raise WorkerQRadarAPIException('Failed to purge hashes from QRadar')
-
+    
+    '''     def update_hashes(self, refset_name, refset_type, data):
+        endpoint = '/reference_data/%s/bulk_load/%s' % (refset_type, refset_name)
+        data = json.dumps(data)
+        status, code, datum = self.radar_requester.api_call(endpoint=endpoint, method_name='post',
+                                                            data=data)
+        if status:
+            return True
+        else:
+            LOGGER.error('Failed to update ref data %s: Code: %s; Data: %s' % (refset_name, str(code), str(datum)))
+            raise WorkerQRadarAPIException('Failed to update ref data') '''
+    
     def update_hashes(self, refset_name, refset_type, data):
         endpoint = '/reference_data/%s/bulk_load/%s' % (refset_type, refset_name)
         data = json.dumps(data)
@@ -291,41 +312,64 @@ class Worker:
         LOGGER.debug('high: %s, %s' % (str(len(high)), high))
         LOGGER.debug('bad: %s, %s' % (str(len(bad)), bad))
         LOGGER.debug('unknown: %s, %s' % (str(len(unknown)), unknown))
+        MSG_TEMPLATE = 'type="%s" ip="%s" domain="%s" hash="%s" msg="%s" score="%s" engines="%s" info=[%s]'
 
-        for hsh, pos, tot in clean:
-            for ip in hashes[hsh.lower()]:
-                msg = Worker.MSG_TEMPLATE % ('clean', ip, hsh, 'executable is OK', pos, tot, hashes[hsh][ip]['value'])
-                self.sender.send(msg)
-        for hsh, pos, tot in low:
-            for ip in hashes[hsh.lower()]:
-                msg = Worker.MSG_TEMPLATE % ('low', ip, hsh,
-                                             'executable is potentially malicious, add this hash manually to the clean '
-                                             'refset if you are sure it\'s OK', pos, tot, hashes[hsh][ip]['value'])
-                self.sender.send(msg)
-        for hsh, pos, tot in high:
-            for ip in hashes[hsh.lower()]:
-                msg = Worker.MSG_TEMPLATE % ('high', ip, hsh, 'executable is highly-potentially malicious, add this '
+        for resphash, haship, hashfile, hashdomain, product, description in clean:
+            msg = Worker.MSG_TEMPLATE % ('clean', haship, hashdomain, resphash, 'executable is OK', "0", "", hashfile + " | " + product + " | " + description)
+            self.sender.send(msg)
+        for resphash, haship, hashfile, hashdomain, detection_points, engines, product, description in low:
+            enginesstr = ' | '.join(engines)
+            msg = Worker.MSG_TEMPLATE % ('low', haship, hashdomain, resphash,
+                                        'executable is potentially malicious, add this hash manually to the clean '
+                                        'refset if you are sure it\'s OK', detection_points, enginesstr, hashfile + " | " + product + " | " + description)
+            self.sender.send(msg)
+        for resphash, haship, hashfile, hashdomain, detection_points, engines, product, description in high:
+            enginesstr = ' | '.join(engines)
+            msg = Worker.MSG_TEMPLATE % ('high', haship, hashdomain, resphash, 'executable is highly-potentially malicious, add this '
                                              'hash manually to the clean refset if you are sure it\'s OK',
-                                             pos, tot, hashes[hsh][ip]['value'])
-                self.sender.send(msg)
-        for hsh, pos, tot in bad:
+                                             detection_points, enginesstr, hashfile + " | " + product + " | " + description)
+            self.sender.send(msg)
+        '''    for hsh, pos, tot in bad:
             for ip in hashes[hsh.lower()]:
                 msg = Worker.MSG_TEMPLATE % ('bad', ip, hsh, 'malicious executable detected',
                                              pos, tot, hashes[hsh][ip]['value'])
-                self.sender.send(msg)
-        for hsh in unknown:
-            for ip in hashes[hsh.lower()]:
-                msg = Worker.MSG_TEMPLATE % ('unknown', ip, hsh, 'executable is unknown',
-                                             '', '', hashes[hsh][ip]['value'])
-                self.sender.send(msg)
+                self.sender.send(msg) '''
+        for resphash, haship, hashfile, hashdomain, product, description in unknown:
+            msg = Worker.MSG_TEMPLATE % ('unknown', haship, hashdomain, resphash, 'executable is unknown',
+                                        '', '', '')
+            self.sender.send(msg)
 
-    def vt_tasks(session):
+    def vt_tasks(self, session):
         tasks = []
-        for hash in hashes[:self.config.max_hashes]:
-            url = baseurl+hash
-            headers = {'x-apikey': next(iterkeys)}
+        for hash in self.hashes[:self.config.max_hashes]:
+            url = self.VT_BASE_API+hash
+            headers = {'x-apikey': next(self.iterkeys)}
             tasks.append(session.get(url, headers=headers, ssl=False))
         return tasks
+
+    async def get_vt_results(self):
+        async with aiohttp.ClientSession() as session:
+            tasks = self.vt_tasks(session)
+            responses = await asyncio.gather(*tasks)
+            for resp in responses:
+                hashdone = str(resp.url).rsplit('/', 1)[-1]
+                if resp.status == 200:
+    #                respd = {}
+    #                last_analysis_results = []
+                    respjson = await resp.json()
+    #                respd[hashdone] = respjson
+                    self.vtresponses[hashdone] = respjson
+#                    self.payback_hash_list.append(hashdone)
+#                    del self.hashes[hashdone]
+                elif resp.status == 404:
+                    self.vtresponses[hashdone] = "Not Found"
+#                    self.payback_hash_list.append(hashdone)
+                else:
+                    self.payback_hash_list.append(hashdone)
+                    respjson = await resp.json()
+                    LOGGER.warning(hashdone+"  "+respjson)
+#                    print(str(resp.status)+": "+hashdone)
+#                    print(await resp.json())
 
     def run(self):
         LOGGER.info('Fetching hashes from QRadar')
@@ -344,17 +388,102 @@ class Worker:
 
 #        hashes = dict()
         for key in loaded_hashes:
-            hashes[key.lower()] = loaded_hashes[key]
+            self.hashes[key.lower()] = loaded_hashes[key]
 
         count = 0
-        hash_keys = list(hashes.keys())
+        hash_keys = list(self.hashes.keys())
         LOGGER.debug('Num of keys to check: %s' % str(len(hash_keys)))
 #        payback_hash_list = list()
 #        clean_hash_list = list()
+        execloop = 0
 
-############# Igor S. Custom #################################
+############# Igor S. Custom #########################################################################
 
-        
+        while len(hash_keys) > 0 or self.config.rate_limit <= execloop:
+            LOGGER.debug('Querying for hashes: %s' % str(','.join(hash_keys)))
+            unknowns = list()
+            clean = list()
+            low = list()
+            high = list()
+            bad = list()
+            get_vt_loop = asyncio.get_event_loop()
+            get_vt_loop.run_until_complete(self.get_vt_results())
+            for resphash in self.vtresponses.keys():
+                class1mal = []
+                class2mal = []
+                class3mal = []
+
+                haship = self. hashes[resphash]['SourceIP']['value']
+                hashfile = self.hashes[resphash]['FileName']['value']
+                hashdomain = self.hashes[resphash]['Domain']['value']
+
+                product = ""
+                description = ""
+                detection_points = 0
+
+                try:
+                    product = self.vtresponses[resphash]["data"]["attributes"]["signature_info"]['product']
+                except KeyError:
+                    pass
+
+                try:
+                    description = self.vtresponses[resphash]["data"]["attributes"]["signature_info"]['description']
+                except KeyError:
+                    pass
+
+                if self.vtresponses[resphash] == "Not Found":
+                    unknowns.append((resphash, haship, hashfile, hashdomain, product, description))
+                    continue
+
+                engineres = self.vtresponses[resphash]["data"]["attributes"]["last_analysis_results"]
+                maldetections = int(self.vtresponses[resphash]["data"]["attributes"]["last_analysis_stats"]['malicious'])
+                if maldetections == 0:
+                    clean.append((resphash, haship, hashfile, hashdomain, product, description))
+                    self.clean_hash_list.append(resphash)
+                    continue
+
+                for engine in engineres.keys():
+                    if engineres[engine]['category'] == "malicious":
+                        if engine in self.config.vt_enginesc1:
+                            class1mal.append(engine)
+                            detection_points = detection_points + 3
+                        elif engine in self.config.vt_enginesc2:
+                            class2mal.append(engine)
+                            detection_points = detection_points + 2
+                        else:
+                            class3mal.append(engine)
+                            detection_points = detection_points + 1
+
+                if len(class1mal) >= 2 and detection_points > 10:
+                    high.append((resphash, haship, hashfile, hashdomain, str(detection_points), class1mal+class2mal+class3mal, product, description))
+                elif len(class1mal) == 1 and len(class2mal) >= 2 and detection_points > 10:
+                    high.append((resphash, haship, hashfile, hashdomain, str(detection_points), class1mal+class2mal+class3mal, product, description))
+                else:
+                    low.append((resphash, haship, hashfile, hashdomain, str(detection_points), class1mal+class2mal+class3mal, product, description))
+
+                hash_keys.remove(resphash)
+
+            self.send_messages(hashes=self.hashes, clean=clean, low=low, high=high, bad=bad, unknown=unknowns)
+            hash_keys = list(self.hashes.keys())
+        execloop = execloop + 1
+
+        if self.clean_hash_list:
+            self.update_hashes(self.CLEAN_SET_NAME, 'sets', self.clean_hash_list)
+
+        if self.payback_hash_list:
+            LOGGER.debug('Payback list: %s' % str(self.payback_hash_list))
+            hashback = self.payback_hash_list + hash_keys
+            hashes_payback = {}
+            for hash in self.payback_hash_list:
+                hashes_payback[hash] = dict()
+                hashes_payback[hash]['SourceIP'] = self.hashes[hash]['SourceIP']['value']
+                hashes_payback[hash]['FileName'] = self.hashes[hash]['FileName']['value']
+                hashes_payback[hash]['Domain'] = self.hashes[hash]['Domain']['value']
+                self.update_hashes('virustotal_to_check_v2C', 'tables', hashes_payback)
+
+
+######################################################################################################
+        ''' 
         start_index = 0
         end_index = self.config.max_hashes
         hash_slice = hash_keys[start_index:end_index]
@@ -390,13 +519,13 @@ class Worker:
                         high.append((report['resource'], report['positives'], report['total']))
                     else:
                         low.append((report['resource'], report['positives'], report['total']))
-                clean_hash_list.extend([c[0] for c in clean])
-                self.send_messages(hashes=hashes, clean=clean, low=low, high=high, bad=bad, unknown=unknowns)
+                self.clean_hash_list.extend([c[0] for c in clean])
+                self.send_messages(hashes=self.hashes, clean=clean, low=low, high=high, bad=bad, unknown=unknowns)
                 if len(reports) < len(hash_slice):
                     LOGGER.warning('Number of reports is less than the number of hashes requested. Check and reduce '
                                    'Max Hashes parameter. Unfetched hashes will be returned to QRadar for later '
                                    'checking.')
-                    payback_hash_list.extend(hash_slice[len(reports):])
+                    self.payback_hash_list.extend(hash_slice[len(reports):])
             else:
                 if code == 204:
                     LOGGER.warning('Rate limit exceeded message from VirusTotal')
@@ -434,7 +563,7 @@ class Worker:
 
         if payback_hash_list:
             self.payback_error_data(hashes=hashes, payback_hash_list=payback_hash_list)
-
+ '''
 
 def check_pid():
     need_start = False
