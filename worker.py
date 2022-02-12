@@ -339,17 +339,17 @@ class Worker:
                                         '', '', '')
             self.sender.send(msg)
 
-    def vt_tasks(self, session):
+    def vt_tasks(self, session, hashkeys):
         tasks = []
-        for hash in self.hashes[:self.config.max_hashes]:
-            url = self.VT_BASE_API+hash
+        for qhash in hashkeys[:self.config.max_hashes]:
+            url = self.VT_BASE_API+qhash
             headers = {'x-apikey': next(self.iterkeys)}
             tasks.append(session.get(url, headers=headers, ssl=False))
         return tasks
 
-    async def get_vt_results(self):
+    async def get_vt_results(self, hashkeys):
         async with aiohttp.ClientSession() as session:
-            tasks = self.vt_tasks(session)
+            tasks = self.vt_tasks(session, hashkeys)
             responses = await asyncio.gather(*tasks)
             for resp in responses:
                 hashdone = str(resp.url).rsplit('/', 1)[-1]
@@ -407,13 +407,13 @@ class Worker:
             high = list()
             bad = list()
             get_vt_loop = asyncio.get_event_loop()
-            get_vt_loop.run_until_complete(self.get_vt_results())
+            get_vt_loop.run_until_complete(self.get_vt_results(hash_keys))
             for resphash in self.vtresponses.keys():
                 class1mal = []
                 class2mal = []
                 class3mal = []
 
-                haship = self. hashes[resphash]['SourceIP']['value']
+                haship = self.hashes[resphash]['SourceIP']['value']
                 hashfile = self.hashes[resphash]['FileName']['value']
                 hashdomain = self.hashes[resphash]['Domain']['value']
 
@@ -464,22 +464,23 @@ class Worker:
                 hash_keys.remove(resphash)
 
             self.send_messages(hashes=self.hashes, clean=clean, low=low, high=high, bad=bad, unknown=unknowns)
-            hash_keys = list(self.hashes.keys())
-        execloop = execloop + 1
+#            hash_keys = list(self.hashes.keys())
+            self.vtresponses = {}
+            execloop = execloop + 1
 
         if self.clean_hash_list:
             self.update_hashes(self.CLEAN_SET_NAME, 'sets', self.clean_hash_list)
 
-        if self.payback_hash_list:
-            LOGGER.debug('Payback list: %s' % str(self.payback_hash_list))
-            hashback = self.payback_hash_list + hash_keys
+        hashback = self.payback_hash_list + hash_keys
+        if len(hashback) > 0:
+            LOGGER.debug('Payback list: %s' % str(hashback))
             hashes_payback = {}
-            for hash in self.payback_hash_list:
-                hashes_payback[hash] = dict()
-                hashes_payback[hash]['SourceIP'] = self.hashes[hash]['SourceIP']['value']
-                hashes_payback[hash]['FileName'] = self.hashes[hash]['FileName']['value']
-                hashes_payback[hash]['Domain'] = self.hashes[hash]['Domain']['value']
-                self.update_hashes('virustotal_to_check_v2C', 'tables', hashes_payback)
+            for qhash in hashback:
+                hashes_payback[qhash] = dict()
+                hashes_payback[qhash]['SourceIP'] = self.hashes[qhash]['SourceIP']['value']
+                hashes_payback[qhash]['FileName'] = self.hashes[qhash]['FileName']['value']
+                hashes_payback[qhash]['Domain'] = self.hashes[qhash]['Domain']['value']
+            self.update_hashes('virustotal_to_check_v2C', 'tables', hashes_payback)
 
 
 ######################################################################################################
