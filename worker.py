@@ -82,33 +82,6 @@ class WorkerConfig:
         LOGGER.debug('Config: %s' % self.get_log_config_str())
 
 
-class VTRequester:
-    SUCCESS_CODE = 200
-#    RATE_LIMIT_CODE = 204
-    RATE_LIMIT_CODE = 429
-    FORBIDDEN_CODE = 403
-#    VT_BASE_API = 'https://www.virustotal.com/vtapi/v2'
-    VT_BASE_API = 'https://www.virustotal.com/api/v3'
-
-    def __init__(self):
-        requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
-
-    def api_call(self, endpoint, method_name='get', params=None):
-        method = getattr(requests, method_name.lower(), None)
-        if method is None:
-            return False, 405, '%s method is not supported' % method_name
-
-        raw_response = method('%s%s' % (VTRequester.VT_BASE_API, endpoint), params=params, verify=False)
-        response_code = raw_response.status_code
-        if response_code == VTRequester.SUCCESS_CODE:
-            return True, response_code, raw_response.json()
-        else:
-            return False, response_code, None
-
-    def file_report(self, params):
-        return self.api_call(endpoint='/file/report', method_name='get', params=params)
-
-
 class Sender:
     def __init__(self, dest=None, port=514, protocol='TCP',
                  input_encoding='utf-8', syslog_output_encoding='utf-8',
@@ -198,7 +171,7 @@ class Worker:
         self.current_key_index = 0
         self.sender = Sender(dest=CONSOLE_IP, origin_hostname='vt_hash_checker')
         self.radar_requester = Requester(base_url=BASE_URL, version=API_VERSION, api_key=self.config.auth_token)
-        self.vt_requester = VTRequester()
+#        self.vt_requester = VTRequester()
         LOGGER.debug('Worker inited')
         
         self.hashes = dict()
